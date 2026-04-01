@@ -1,0 +1,55 @@
+{
+  "name": "@screenplay-parser/core",
+  "version": "1.0.0",
+  "description": "Professional-grade screenplay parsing library with modular architecture, learning system, and cross-platform support",
+  "main": "dist/screenplay-parser.cjs.js",
+  "module": "dist/screenplay-parser.esm.js",
+  "browser": "dist/screenplay-parser.umd.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/screenplay-parser.esm.js",
+      "require": "./dist/screenplay-parser.cjs.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "vite build && npm run build:types",
+    "build:types": "tsc --emitDeclarationOnly --outDir dist",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src/ tests/ --ext .ts,.tsx",
+    "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
+    "docs": "typedoc --out docs/generated src/index.ts"
+  },
+  "keywords": [
+    "screenplay",
+    "parser",
+    "document-intelligence",
+    "ocr",
+    "pdf",
+    "learning"
+  ],
+  "license": "UNLICENSED",
+  "private": true,
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "eslint": "^8.56.0",
+    "prettier": "^3.2.0",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.12",
+    "vitest": "^1.2.0"
+  },
+  "dependencies": {
+    "pdfjs-dist": "^4.0.379",
+    "tesseract.js": "^5.0.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

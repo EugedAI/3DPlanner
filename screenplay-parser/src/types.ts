@@ -1,0 +1,32 @@
+// Re-export all types for public API consumers
+export type {
+  ElementType,
+  ScriptFormat,
+  InputFileType,
+  LogLevel,
+  ClaudeModel,
+  FeedbackType,
+  ParseMode,
+  ParsedElement,
+  ParseResult,
+  StorageAdapter,
+  ParserConfig,
+  Correction,
+  UserFeedback,
+  Pattern,
+  PatternSet,
+  ValidationError,
+  TestScript,
+  GoldenReference,
+  TestResult,
+  TestResults,
+  ParserMetrics,
+  AccuracyBreakdown,
+  ParserPlugin,
+  ParsingInput,
+  PluginConfig,
+  OcrResult,
+  OcrPage,
+} from './core/types';
+
+export { DEFAULT_CONFIG } from './core/types';

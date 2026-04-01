@@ -1,0 +1,13 @@
+src/
+tests/
+examples/
+docs/
+.github/
+*.test.ts
+*.spec.ts
+tsconfig.json
+vite.config.ts
+.eslintrc*
+.prettierrc*
+*.map
+node_modules/
