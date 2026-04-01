@@ -18,6 +18,7 @@
     "LICENSE"
   ],
   "scripts": {
+    "dev": "vite --open app/index.html",
     "build": "vite build && npm run build:types",
     "build:types": "tsc --emitDeclarationOnly --outDir dist",
     "test": "vitest run",

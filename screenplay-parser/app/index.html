@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Screenplay Parser</title>
+<style>
+/* ============================================================
+   RESET & VARIABLES
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0f1117;
+  --bg-card: #1a1d27;
+  --bg-hover: #242836;
+  --bg-input: #12141c;
+  --border: #2a2e3a;
+  --border-focus: #6366f1;
+  --text: #e4e4e7;
+  --text-dim: #71717a;
+  --text-muted: #52525b;
+  --accent: #6366f1;
+  --accent-hover: #818cf8;
+  --green: #22c55e;
+  --red: #ef4444;
+  --orange: #f59e0b;
+  --blue: #3b82f6;
+  --purple: #a855f7;
+  --pink: #ec4899;
+  --teal: #14b8a6;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --mono: 'JetBrains Mono', 'Fira Code', monospace;
+}
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; line-height: 1.5; }
+
+/* ============================================================
+   LAYOUT
+   ============================================================ */
+#app {
+  display: flex; flex-direction: column; height: 100vh;
+}
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 24px;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
+header h1 span { color: var(--accent); }
+.header-actions { display: flex; gap: 8px; align-items: center; }
+
+/* Tabs */
+.tabs {
+  display: flex; gap: 0; padding: 0 24px;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.tab {
+  padding: 10px 20px;
+  font-size: 13px; font-weight: 500;
+  color: var(--text-dim);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+  background: none; border-top: none; border-left: none; border-right: none;
+  font-family: var(--font);
+}
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* Main content */
+.main { flex: 1; overflow: auto; padding: 24px; }
+.panel { display: none; }
+.panel.active { display: block; }
+
+/* ============================================================
+   BUTTONS
+   ============================================================ */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px;
+  font-size: 13px; font-weight: 500;
+  font-family: var(--font);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.btn:hover { background: var(--bg-hover); border-color: var(--text-muted); }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+.btn-danger { color: var(--red); }
+.btn-danger:hover { background: rgba(239,68,68,0.1); border-color: var(--red); }
+
+/* ============================================================
+   DROP ZONE
+   ============================================================ */
+.drop-zone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-lg);
+  padding: 48px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--bg-card);
+  margin-bottom: 24px;
+}
+.drop-zone:hover, .drop-zone.dragover {
+  border-color: var(--accent);
+  background: rgba(99, 102, 241, 0.05);
+}
+.drop-zone-icon { font-size: 36px; margin-bottom: 12px; opacity: 0.4; }
+.drop-zone-text { color: var(--text-dim); margin-bottom: 4px; }
+.drop-zone-hint { color: var(--text-muted); font-size: 12px; }
+
+/* ============================================================
+   SCRIPT LIST
+   ============================================================ */
+.script-list { display: flex; flex-direction: column; gap: 8px; }
+.script-card {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: all 0.15s;
+}
+.script-card:hover { border-color: var(--text-muted); }
+.script-info { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.script-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.script-meta { font-size: 12px; color: var(--text-dim); display: flex; gap: 12px; }
+.script-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+/* ============================================================
+   PARSE RESULTS
+   ============================================================ */
+.result-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 16px; flex-wrap: wrap; gap: 12px;
+}
+.result-title { font-size: 18px; font-weight: 600; }
+.result-stats { display: flex; gap: 16px; flex-wrap: wrap; }
+.stat { display: flex; flex-direction: column; align-items: center; }
+.stat-value { font-size: 20px; font-weight: 700; }
+.stat-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; }
+.stat-value.good { color: var(--green); }
+.stat-value.ok { color: var(--orange); }
+.stat-value.low { color: var(--red); }
+
+.warnings { margin-bottom: 16px; }
+.warning {
+  padding: 8px 12px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: var(--radius);
+  color: var(--orange);
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
+.elements-list { display: flex; flex-direction: column; gap: 2px; }
+.element-row {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  transition: background 0.1s;
+  font-size: 13px;
+}
+.element-row:hover { background: var(--bg-hover); }
+.element-row.flagged { background: rgba(239, 68, 68, 0.08); }
+
+.element-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 100px; padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.03em;
+  flex-shrink: 0;
+}
+.element-text { flex: 1; word-break: break-word; }
+.element-conf { font-size: 11px; color: var(--text-muted); min-width: 36px; text-align: right; flex-shrink: 0; }
+.element-flag { color: var(--red); font-size: 11px; flex-shrink: 0; }
+
+/* Element type colors */
+.badge-sceneHeading { background: rgba(239,68,68,0.15); color: #f87171; }
+.badge-character { background: rgba(59,130,246,0.15); color: #60a5fa; }
+.badge-dialogue { background: rgba(34,197,94,0.15); color: #4ade80; }
+.badge-action { background: rgba(113,113,122,0.15); color: #a1a1aa; }
+.badge-parenthetical { background: rgba(168,85,247,0.15); color: #c084fc; }
+.badge-transition { background: rgba(245,158,11,0.15); color: #fbbf24; }
+.badge-titlePage { background: rgba(236,72,153,0.15); color: #f472b6; }
+.badge-note { background: rgba(20,184,166,0.15); color: #2dd4bf; }
+.badge-lyric { background: rgba(168,85,247,0.15); color: #c084fc; }
+.badge-section { background: rgba(59,130,246,0.15); color: #60a5fa; }
+.badge-synopsis { background: rgba(20,184,166,0.15); color: #2dd4bf; }
+.badge-unknown { background: rgba(113,113,122,0.15); color: #71717a; }
+.badge-pageBreak { background: rgba(113,113,122,0.1); color: #52525b; }
+.badge-dualDialogue { background: rgba(34,197,94,0.15); color: #4ade80; }
+
+/* ============================================================
+   TEXT INPUT MODE
+   ============================================================ */
+.text-input-area {
+  width: 100%;
+  min-height: 250px;
+  padding: 16px;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.7;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  resize: vertical;
+  margin-bottom: 12px;
+}
+.text-input-area:focus { outline: none; border-color: var(--border-focus); }
+
+/* ============================================================
+   SIDEBAR / INFO PANELS
+   ============================================================ */
+.info-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px; margin-bottom: 24px;
+}
+.info-card {
+  padding: 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.info-card-title { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+.info-card-value { font-size: 24px; font-weight: 700; }
+.info-card-list { list-style: none; }
+.info-card-list li { padding: 3px 0; font-size: 13px; color: var(--text-dim); }
+.info-card-list li span { color: var(--text); }
+
+/* ============================================================
+   METRICS TAB
+   ============================================================ */
+.metrics-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+/* ============================================================
+   EMPTY STATE
+   ============================================================ */
+.empty-state {
+  text-align: center; padding: 60px 20px;
+  color: var(--text-dim);
+}
+.empty-state-icon { font-size: 48px; opacity: 0.3; margin-bottom: 16px; }
+.empty-state-text { font-size: 15px; margin-bottom: 8px; }
+.empty-state-hint { font-size: 13px; color: var(--text-muted); }
+
+/* ============================================================
+   MODAL
+   ============================================================ */
+.modal-backdrop {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 1000;
+  align-items: center; justify-content: center;
+}
+.modal-backdrop.open { display: flex; }
+.modal {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  max-width: 600px; width: 90%;
+  max-height: 80vh; overflow-y: auto;
+}
+.modal h2 { font-size: 16px; margin-bottom: 16px; }
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+@media (max-width: 600px) {
+  .main { padding: 16px; }
+  .result-stats { gap: 8px; }
+  .element-badge { min-width: 80px; font-size: 10px; }
+  .info-grid { grid-template-columns: 1fr 1fr; }
+}
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<div id="app">
+  <!-- HEADER -->
+  <header>
+    <h1><span>Screenplay</span> Parser</h1>
+    <div class="header-actions">
+      <button class="btn btn-sm" id="btn-export-json" style="display:none">Export JSON</button>
+      <button class="btn btn-sm" id="btn-export-patterns">Export Patterns</button>
+    </div>
+  </header>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab active" data-tab="upload">Upload</button>
+    <button class="tab" data-tab="paste">Paste Text</button>
+    <button class="tab" data-tab="scripts">My Scripts</button>
+    <button class="tab" data-tab="results">Results</button>
+    <button class="tab" data-tab="metrics">Metrics</button>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="main">
+
+    <!-- UPLOAD TAB -->
+    <div class="panel active" id="panel-upload">
+      <div class="drop-zone" id="drop-zone">
+        <div class="drop-zone-icon">&#128196;</div>
+        <div class="drop-zone-text">Drop screenplay files here</div>
+        <div class="drop-zone-hint">PDF, TXT, Fountain, FDX — or click to browse</div>
+        <input type="file" id="file-input" multiple accept=".pdf,.txt,.text,.fountain,.fdx,.png,.jpg,.jpeg,.tiff,.bmp" style="display:none">
+      </div>
+      <div id="upload-queue" class="script-list"></div>
+    </div>
+
+    <!-- PASTE TAB -->
+    <div class="panel" id="panel-paste">
+      <textarea class="text-input-area" id="paste-input" placeholder="Paste screenplay text here...
+
+Example:
+
+FADE IN:
+
+INT. COFFEE SHOP - MORNING
+
+Sarah sits at a table, stirring her coffee.
+
+SARAH
+I can't do this anymore.
+
+JOHN (V.O.)
+You don't have a choice.
+"></textarea>
+      <div style="display:flex; gap:8px;">
+        <button class="btn btn-primary" id="btn-parse-text">Parse Text</button>
+        <button class="btn" id="btn-clear-text">Clear</button>
+      </div>
+    </div>
+
+    <!-- SCRIPTS TAB -->
+    <div class="panel" id="panel-scripts">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h2 style="font-size:16px;">Uploaded Scripts</h2>
+        <span id="script-count" style="color:var(--text-dim); font-size:13px;">0 scripts</span>
+      </div>
+      <div id="scripts-list" class="script-list">
+        <div class="empty-state">
+          <div class="empty-state-icon">&#128203;</div>
+          <div class="empty-state-text">No scripts yet</div>
+          <div class="empty-state-hint">Upload files or paste text to get started</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RESULTS TAB -->
+    <div class="panel" id="panel-results">
+      <div id="results-content">
+        <div class="empty-state">
+          <div class="empty-state-icon">&#128269;</div>
+          <div class="empty-state-text">No parse results yet</div>
+          <div class="empty-state-hint">Upload a script or paste text to parse</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- METRICS TAB -->
+    <div class="panel" id="panel-metrics">
+      <h2 style="font-size:16px; margin-bottom:16px;">Parser Metrics</h2>
+      <div id="metrics-content" class="metrics-grid">
+        <div class="info-card">
+          <div class="info-card-title">Total Parses</div>
+          <div class="info-card-value" id="m-total">0</div>
+        </div>
+        <div class="info-card">
+          <div class="info-card-title">Avg Confidence</div>
+          <div class="info-card-value" id="m-confidence">—</div>
+        </div>
+        <div class="info-card">
+          <div class="info-card-title">Avg Parse Time</div>
+          <div class="info-card-value" id="m-time">—</div>
+        </div>
+        <div class="info-card">
+          <div class="info-card-title">Corrections</div>
+          <div class="info-card-value" id="m-corrections">0</div>
+        </div>
+        <div class="info-card">
+          <div class="info-card-title">Learned Patterns</div>
+          <div class="info-card-value" id="m-patterns">0</div>
+        </div>
+        <div class="info-card">
+          <div class="info-card-title">Feedback Given</div>
+          <div class="info-card-value" id="m-feedback">0</div>
+        </div>
+      </div>
+      <div style="margin-top:24px;">
+        <button class="btn btn-sm" id="btn-refresh-metrics">Refresh Metrics</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CORRECTION MODAL -->
+<div class="modal-backdrop" id="correction-modal">
+  <div class="modal">
+    <h2>Correct Element</h2>
+    <p style="margin-bottom:12px; color:var(--text-dim); font-size:13px;">Original: <span id="corr-original-type" style="color:var(--text)"></span></p>
+    <p style="margin-bottom:12px; font-size:13px;" id="corr-text"></p>
+    <label style="display:block; margin-bottom:8px; font-size:12px; color:var(--text-dim);">Correct type:</label>
+    <select id="corr-type-select" style="width:100%; padding:8px; background:var(--bg-input); border:1px solid var(--border); border-radius:var(--radius); color:var(--text); font-size:13px; margin-bottom:16px;">
+      <option value="sceneHeading">Scene Heading</option>
+      <option value="action">Action</option>
+      <option value="character">Character</option>
+      <option value="dialogue">Dialogue</option>
+      <option value="parenthetical">Parenthetical</option>
+      <option value="transition">Transition</option>
+      <option value="titlePage">Title Page</option>
+      <option value="note">Note</option>
+      <option value="lyric">Lyric</option>
+      <option value="section">Section</option>
+      <option value="synopsis">Synopsis</option>
+    </select>
+    <div style="display:flex; gap:8px; justify-content:flex-end;">
+      <button class="btn" id="corr-cancel">Cancel</button>
+      <button class="btn btn-primary" id="corr-save">Save Correction</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { ScreenplayParser, InMemoryAdapter } from '../src/index.ts';
+
+// ============================================================
+// INIT
+// ============================================================
+const storage = new InMemoryAdapter();
+const parser = new ScreenplayParser({
+  storage,
+  enableLearning: true,
+  enableClaudeMode: false,
+  logLevel: 'info',
+});
+
+const state = {
+  scripts: [],       // { id, name, size, buffer, result? }
+  currentResult: null,
+  currentParseId: null,
+};
+
+// ============================================================
+// TABS
+// ============================================================
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(`panel-${tab.dataset.tab}`).classList.add('active');
+
+    if (tab.dataset.tab === 'metrics') refreshMetrics();
+    if (tab.dataset.tab === 'scripts') renderScriptList();
+  });
+});
+
+// ============================================================
+// DROP ZONE / FILE UPLOAD
+// ============================================================
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  handleFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener('change', () => {
+  handleFiles(fileInput.files);
+  fileInput.value = '';
+});
+
+async function handleFiles(fileList) {
+  const queue = document.getElementById('upload-queue');
+
+  for (const file of fileList) {
+    const id = `script-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const buffer = await file.arrayBuffer();
+
+    const script = { id, name: file.name, size: file.size, buffer, result: null };
+    state.scripts.push(script);
+
+    // Show in upload queue
+    const card = document.createElement('div');
+    card.className = 'script-card';
+    card.id = `upload-${id}`;
+    card.innerHTML = `
+      <div class="script-info">
+        <div class="script-name">${esc(file.name)}</div>
+        <div class="script-meta"><span>Parsing...</span></div>
+      </div>
+    `;
+    queue.prepend(card);
+
+    // Parse immediately
+    try {
+      const result = await parser.parseFile(buffer, file.name);
+      script.result = result;
+
+      card.querySelector('.script-meta').innerHTML = `
+        <span>${result.elements.length} elements</span>
+        <span>${(result.confidence * 100).toFixed(0)}% confidence</span>
+        <span>${result.duration}ms</span>
+      `;
+      card.innerHTML += `
+        <div class="script-actions">
+          <button class="btn btn-sm btn-primary" onclick="viewResult('${id}')">View</button>
+          <button class="btn btn-sm btn-danger" onclick="removeScript('${id}')">Remove</button>
+        </div>
+      `;
+    } catch (err) {
+      card.querySelector('.script-meta').innerHTML = `<span style="color:var(--red)">Error: ${esc(err.message)}</span>`;
+    }
+  }
+
+  renderScriptList();
+}
+
+// ============================================================
+// PASTE TEXT
+// ============================================================
+document.getElementById('btn-parse-text').addEventListener('click', async () => {
+  const text = document.getElementById('paste-input').value.trim();
+  if (!text) return;
+
+  const id = `text-${Date.now()}`;
+  const script = { id, name: 'Pasted Text', size: text.length, buffer: null, result: null };
+  state.scripts.push(script);
+
+  try {
+    const result = await parser.parseText(text);
+    script.result = result;
+    showResult(result);
+    switchTab('results');
+  } catch (err) {
+    alert(`Parse error: ${err.message}`);
+  }
+
+  renderScriptList();
+});
+
+document.getElementById('btn-clear-text').addEventListener('click', () => {
+  document.getElementById('paste-input').value = '';
+});
+
+// ============================================================
+// VIEW RESULT
+// ============================================================
+window.viewResult = function(scriptId) {
+  const script = state.scripts.find(s => s.id === scriptId);
+  if (!script?.result) return;
+  showResult(script.result);
+  switchTab('results');
+};
+
+function showResult(result) {
+  state.currentResult = result;
+  state.currentParseId = result.id;
+
+  const container = document.getElementById('results-content');
+  document.getElementById('btn-export-json').style.display = 'inline-flex';
+
+  const confClass = result.confidence >= 0.85 ? 'good' : result.confidence >= 0.70 ? 'ok' : 'low';
+
+  let html = `
+    <div class="result-header">
+      <div class="result-title">${esc(result.title)}</div>
+      <div class="result-stats">
+        <div class="stat">
+          <div class="stat-value ${confClass}">${(result.confidence * 100).toFixed(1)}%</div>
+          <div class="stat-label">Confidence</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value">${result.elements.length}</div>
+          <div class="stat-label">Elements</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value">${result.characters.length}</div>
+          <div class="stat-label">Characters</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value">${result.scenes.length}</div>
+          <div class="stat-label">Scenes</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value">${result.duration}ms</div>
+          <div class="stat-label">Time</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Info cards
+  html += `<div class="info-grid">`;
+  if (result.characters.length > 0) {
+    html += `<div class="info-card">
+      <div class="info-card-title">Characters</div>
+      <ul class="info-card-list">${result.characters.map(c => `<li><span>${esc(c)}</span></li>`).join('')}</ul>
+    </div>`;
+  }
+  if (result.scenes.length > 0) {
+    html += `<div class="info-card">
+      <div class="info-card-title">Scenes</div>
+      <ul class="info-card-list">${result.scenes.map(s => `<li><span>${esc(s)}</span></li>`).join('')}</ul>
+    </div>`;
+  }
+  html += `<div class="info-card">
+    <div class="info-card-title">Details</div>
+    <ul class="info-card-list">
+      <li>Format: <span>${result.format}</span></li>
+      <li>Mode: <span>${result.mode}</span></li>
+      <li>Pages: <span>${result.pageCount}</span></li>
+      <li>Flagged: <span style="color:${result.flaggedElements.length > 0 ? 'var(--orange)' : 'var(--green)'}">${result.flaggedElements.length}</span></li>
+    </ul>
+  </div>`;
+  html += `</div>`;
+
+  // Warnings
+  if (result.warnings.length > 0) {
+    html += `<div class="warnings">`;
+    for (const w of result.warnings) {
+      html += `<div class="warning">${esc(w)}</div>`;
+    }
+    html += `</div>`;
+  }
+
+  // Elements
+  html += `<h3 style="font-size:14px; margin-bottom:8px; color:var(--text-dim);">Parsed Elements</h3>`;
+  html += `<div class="elements-list">`;
+  for (const el of result.elements) {
+    const flagClass = el.flagged ? ' flagged' : '';
+    html += `
+      <div class="element-row${flagClass}" data-index="${el.index}" onclick="openCorrection(${el.index})" style="cursor:pointer;" title="Click to correct">
+        <span class="element-badge badge-${el.type}">${el.type}</span>
+        <span class="element-text">${esc(el.text)}</span>
+        <span class="element-conf">${(el.confidence * 100).toFixed(0)}%</span>
+        ${el.flagged ? `<span class="element-flag" title="${esc(el.flagReason || '')}">&#9888;</span>` : ''}
+      </div>
+    `;
+  }
+  html += `</div>`;
+
+  container.innerHTML = html;
+}
+
+// ============================================================
+// CORRECTIONS
+// ============================================================
+window.openCorrection = function(elementIndex) {
+  if (!state.currentResult) return;
+  const el = state.currentResult.elements[elementIndex];
+  if (!el) return;
+
+  document.getElementById('corr-original-type').textContent = el.type;
+  document.getElementById('corr-text').textContent = el.text;
+  document.getElementById('corr-type-select').value = el.type;
+  document.getElementById('correction-modal').classList.add('open');
+
+  document.getElementById('corr-save').onclick = async () => {
+    const newType = document.getElementById('corr-type-select').value;
+    if (newType === el.type) {
+      // Mark as correct feedback
+      await parser.recordFeedback(state.currentParseId, {
+        feedback: 'correct',
+        timestamp: new Date(),
+      });
+    } else {
+      // Record correction
+      await parser.recordCorrection(state.currentParseId, {
+        elementIndex: el.index,
+        originalType: el.type,
+        correctedType: newType,
+        originalText: el.text,
+        userFeedback: 'correction',
+        timestamp: new Date(),
+        mode: state.currentResult.mode,
+        scriptFormat: state.currentResult.format,
+      });
+
+      // Update display
+      el.type = newType;
+      showResult(state.currentResult);
+    }
+    document.getElementById('correction-modal').classList.remove('open');
+  };
+};
+
+document.getElementById('corr-cancel').addEventListener('click', () => {
+  document.getElementById('correction-modal').classList.remove('open');
+});
+
+document.getElementById('correction-modal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.remove('open');
+});
+
+// ============================================================
+// SCRIPT LIST
+// ============================================================
+function renderScriptList() {
+  const list = document.getElementById('scripts-list');
+  document.getElementById('script-count').textContent = `${state.scripts.length} script${state.scripts.length !== 1 ? 's' : ''}`;
+
+  if (state.scripts.length === 0) {
+    list.innerHTML = `<div class="empty-state">
+      <div class="empty-state-icon">&#128203;</div>
+      <div class="empty-state-text">No scripts yet</div>
+      <div class="empty-state-hint">Upload files or paste text to get started</div>
+    </div>`;
+    return;
+  }
+
+  list.innerHTML = state.scripts.map(s => `
+    <div class="script-card">
+      <div class="script-info">
+        <div class="script-name">${esc(s.name)}</div>
+        <div class="script-meta">
+          <span>${formatSize(s.size)}</span>
+          ${s.result ? `<span>${s.result.elements.length} elements</span><span>${(s.result.confidence * 100).toFixed(0)}%</span>` : '<span style="color:var(--text-muted)">Not parsed</span>'}
+        </div>
+      </div>
+      <div class="script-actions">
+        ${s.result ? `<button class="btn btn-sm btn-primary" onclick="viewResult('${s.id}')">View</button>` : ''}
+        <button class="btn btn-sm btn-danger" onclick="removeScript('${s.id}')">Remove</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+window.removeScript = function(id) {
+  state.scripts = state.scripts.filter(s => s.id !== id);
+  const uploadCard = document.getElementById(`upload-${id}`);
+  if (uploadCard) uploadCard.remove();
+  renderScriptList();
+};
+
+// ============================================================
+// METRICS
+// ============================================================
+async function refreshMetrics() {
+  const metrics = await parser.getMetrics();
+  const patterns = await parser.getPatterns();
+
+  document.getElementById('m-total').textContent = metrics.totalParses;
+  document.getElementById('m-confidence').textContent = metrics.totalParses > 0 ? `${(metrics.averageConfidence * 100).toFixed(1)}%` : '—';
+  document.getElementById('m-time').textContent = metrics.totalParses > 0 ? `${metrics.averageParseTime.toFixed(0)}ms` : '—';
+  document.getElementById('m-corrections').textContent = metrics.totalCorrections;
+  document.getElementById('m-patterns').textContent = patterns.length;
+  document.getElementById('m-feedback').textContent = metrics.totalFeedback;
+}
+document.getElementById('btn-refresh-metrics').addEventListener('click', refreshMetrics);
+
+// ============================================================
+// EXPORTS
+// ============================================================
+document.getElementById('btn-export-json').addEventListener('click', () => {
+  if (!state.currentResult) return;
+  download(JSON.stringify(state.currentResult, null, 2), `parse-result-${state.currentResult.id}.json`, 'application/json');
+});
+
+document.getElementById('btn-export-patterns').addEventListener('click', async () => {
+  const patterns = await parser.exportPatterns();
+  download(JSON.stringify(patterns, null, 2), 'learned-patterns.json', 'application/json');
+});
+
+// ============================================================
+// HELPERS
+// ============================================================
+function switchTab(name) {
+  document.querySelector(`.tab[data-tab="${name}"]`).click();
+}
+
+function esc(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function download(content, filename, type) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>
