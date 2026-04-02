@@ -554,7 +554,7 @@
     <span class="dot"></span>
     Claude Code Token Tracker
   </div>
-  <div class="utc-clock">UTC <span id="clock">--:--:--</span></div>
+  <div class="utc-clock">GMT <span id="clock">--:--:--</span></div>
 </header>
 
 <main>
@@ -562,14 +562,14 @@
   <div class="card" id="card-countdown">
     <div class="card-title">Next Reset</div>
     <div class="countdown-big" id="countdown-timer">--:--:--</div>
-    <div class="countdown-label">Resets daily at 19:00 UTC</div>
+    <div class="countdown-label">Resets daily at 19:00 GMT</div>
     <div class="progress-track">
       <div class="progress-fill" id="countdown-progress" style="width:0%"></div>
     </div>
     <div class="progress-meta">
-      <span id="progress-start-label">19:00 UTC</span>
+      <span id="progress-start-label">19:00 GMT</span>
       <span id="progress-pct">0%</span>
-      <span id="progress-end-label">19:00 UTC +1d</span>
+      <span id="progress-end-label">19:00 GMT +1d</span>
     </div>
   </div>
 
@@ -588,7 +588,7 @@
 
   <!-- Heatmap -->
   <div class="card" id="card-heatmap">
-    <div class="card-title">Your 24-Hour Usage Pattern (UTC)</div>
+    <div class="card-title">Your 24-Hour Usage Pattern (GMT)</div>
     <div class="heatmap-grid" id="heatmap-grid"></div>
     <div class="heatmap-labels" id="heatmap-labels"></div>
     <div class="heatmap-legend">
@@ -622,8 +622,8 @@
   <div class="card" id="card-tips">
     <div class="card-title">Tips</div>
     <div class="tips-list">
-      <div class="tip-item"><span class="tip-icon">▶</span><span>Use after <strong>19:00 UTC</strong> to start with a fresh daily token budget.</span></div>
-      <div class="tip-item"><span class="tip-icon">▶</span><span><strong>Off-peak hours (20:00–08:00 UTC)</strong> mean less server load and generally faster responses.</span></div>
+      <div class="tip-item"><span class="tip-icon">▶</span><span>Use after <strong>19:00 GMT</strong> to start with a fresh daily token budget.</span></div>
+      <div class="tip-item"><span class="tip-icon">▶</span><span><strong>Off-peak hours (20:00–08:00 GMT)</strong> mean less server load and generally faster responses.</span></div>
       <div class="tip-item"><span class="tip-icon">▶</span><span>Cache-heavy sessions cost fewer tokens — reuse long context windows where possible.</span></div>
       <div class="tip-item"><span class="tip-icon">▶</span><span>Break very large tasks across the reset boundary to avoid hitting limits mid-session.</span></div>
     </div>
@@ -765,7 +765,7 @@ function updateStatus(now) {
   } else {
     mode = 'peak';
     label = '🔴 PEAK HOURS';
-    explanation = 'US and EU developer overlap — this is the busiest period for the Claude API. Consider delaying heavy usage until after 19:00 UTC when tokens also reset.';
+    explanation = 'US and EU developer overlap — this is the busiest period for the Claude API. Consider delaying heavy usage until after 19:00 GMT when tokens also reset.';
   }
 
   badge.className = 'status-badge ' + mode;
@@ -788,7 +788,7 @@ function renderHeatmap(patterns) {
     const cell = document.createElement('div');
     cell.className = 'heatmap-cell' + (h === currentH ? ' current-hour' : '');
     cell.style.background = heatColor(val, max);
-    cell.setAttribute('data-tip', `${pad2(h)}:00 UTC — ${fmtN(val)} tokens`);
+    cell.setAttribute('data-tip', `${pad2(h)}:00 GMT — ${fmtN(val)} tokens`);
     grid.appendChild(cell);
 
     const lbl = document.createElement('div');
@@ -827,7 +827,7 @@ function renderGlobalChart() {
     const bar = document.createElement('div');
     bar.className = `global-bar ${cls}`;
     bar.style.height = pct + '%';
-    bar.setAttribute('data-tip', `${pad2(h)}:00 UTC — load ${level}/10`);
+    bar.setAttribute('data-tip', `${pad2(h)}:00 GMT — load ${level}/10`);
 
     if (h === currentH) {
       const nowLbl = document.createElement('div');
@@ -889,7 +889,7 @@ function renderSessions(sessions) {
   sessions.slice(0, 20).forEach(s => {
     const start = new Date(s.start);
     const end   = new Date(s.end);
-    const startStr = `${pad2(start.getUTCMonth()+1)}/${pad2(start.getUTCDate())} ${pad2(start.getUTCHours())}:${pad2(start.getUTCMinutes())} UTC`;
+    const startStr = `${pad2(start.getUTCMonth()+1)}/${pad2(start.getUTCDate())} ${pad2(start.getUTCHours())}:${pad2(start.getUTCMinutes())} GMT`;
     const durMs  = end.getTime() - start.getTime();
     const durMin = Math.round(durMs / 60000);
     const durStr = durMin < 60 ? `${durMin}m` : `${Math.floor(durMin/60)}h ${durMin%60}m`;
@@ -921,7 +921,7 @@ function setDataMeta(generatedAt, isDemo) {
     meta.style.color = '#eab308';
   } else {
     const d = new Date(generatedAt);
-    const ts = `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())} UTC`;
+    const ts = `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())} GMT`;
     meta.innerHTML = `Data generated at <span>${ts}</span> — refresh the page or restart the server to update.`;
   }
 }
