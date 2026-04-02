@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Claude Code Token Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg-primary: #1a1a1a;
+      --bg-surface: #242424;
+      --bg-elevated: #303030;
+      --border: #333333;
+      --text-primary: #f5f4f0;
+      --text-secondary: #aaaaaa;
+      --accent: #FF6B00;
+      --accent-hover: #e86000;
+      --accent-dim: #7B3500;
+      --green: #22c55e;
+      --yellow: #eab308;
+      --red: #ef4444;
+      --green-dim: #14532d;
+      --yellow-dim: #713f12;
+      --red-dim: #7f1d1d;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      line-height: 1.5;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 1.5rem;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .header-title {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 1.3rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .header-title .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      display: inline-block;
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.7); }
+    }
+
+    .utc-clock {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      letter-spacing: 0.08em;
+    }
+
+    .utc-clock span {
+      color: var(--text-primary);
+    }
+
+    /* ── Layout ── */
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 1.5rem;
+      display: grid;
+      gap: 1.25rem;
+      grid-template-columns: 1fr 1fr;
+      grid-template-areas:
+        "countdown status"
+        "today     today"
+        "heatmap   heatmap"
+        "global    global"
+        "sessions  sessions"
+        "tips      tips";
+    }
+
+    @media (max-width: 700px) {
+      main {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+          "countdown"
+          "status"
+          "today"
+          "heatmap"
+          "global"
+          "sessions"
+          "tips";
+      }
+    }
+
+    /* ── Card ── */
+    .card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      transition: border-color 0.2s;
+    }
+
+    .card:hover { border-color: #444; }
+
+    .card-title {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      margin-bottom: 1rem;
+    }
+
+    /* ── Countdown ── */
+    #card-countdown { grid-area: countdown; }
+
+    .countdown-big {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 2.6rem;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 0.04em;
+      line-height: 1;
+      margin-bottom: 0.6rem;
+    }
+
+    .countdown-label {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      margin-bottom: 1rem;
+    }
+
+    .progress-track {
+      background: var(--bg-elevated);
+      border-radius: 99px;
+      height: 8px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent-dim), var(--accent));
+      border-radius: 99px;
+      transition: width 1s linear;
+    }
+
+    .progress-meta {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 0.4rem;
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+    }
+
+    /* ── Status ── */
+    #card-status { grid-area: status; }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.35rem 0.75rem;
+      border-radius: 99px;
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      margin-bottom: 0.75rem;
+    }
+
+    .status-badge.great  { background: var(--green-dim);  color: var(--green); }
+    .status-badge.moderate { background: var(--yellow-dim); color: var(--yellow); }
+    .status-badge.peak   { background: var(--red-dim);   color: var(--red); }
+
+    .status-desc {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      line-height: 1.55;
+    }
+
+    /* ── Today's Usage ── */
+    #card-today { grid-area: today; }
+
+    .today-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.75rem;
+    }
+
+    @media (max-width: 560px) {
+      .today-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    .today-stat {
+      background: var(--bg-elevated);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+    }
+
+    .today-stat-label {
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 0.3rem;
+    }
+
+    .today-stat-value {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .today-stat-bar-track {
+      margin-top: 0.4rem;
+      background: var(--bg-surface);
+      border-radius: 99px;
+      height: 3px;
+      overflow: hidden;
+    }
+
+    .today-stat-bar-fill {
+      height: 100%;
+      border-radius: 99px;
+      background: var(--accent);
+    }
+
+    /* ── Heatmap ── */
+    #card-heatmap { grid-area: heatmap; }
+
+    .heatmap-grid {
+      display: grid;
+      grid-template-columns: repeat(24, 1fr);
+      gap: 4px;
+      margin-bottom: 0.5rem;
+    }
+
+    @media (max-width: 600px) {
+      .heatmap-grid {
+        grid-template-columns: repeat(12, 1fr);
+        gap: 3px;
+      }
+    }
+
+    .heatmap-cell {
+      aspect-ratio: 1;
+      border-radius: 4px;
+      position: relative;
+      cursor: default;
+      transition: transform 0.15s;
+    }
+
+    .heatmap-cell:hover { transform: scale(1.15); z-index: 2; }
+
+    .heatmap-cell.current-hour {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+      animation: pulse-cell 1.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse-cell {
+      0%, 100% { outline-color: var(--accent); }
+      50% { outline-color: transparent; }
+    }
+
+    .heatmap-labels {
+      display: grid;
+      grid-template-columns: repeat(24, 1fr);
+      gap: 4px;
+      font-size: 0.6rem;
+      color: var(--text-secondary);
+      text-align: center;
+    }
+
+    @media (max-width: 600px) {
+      .heatmap-labels {
+        grid-template-columns: repeat(12, 1fr);
+        font-size: 0.55rem;
+      }
+    }
+
+    .heatmap-label-item.current-hour-label {
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    .heatmap-legend {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+    }
+
+    .legend-gradient {
+      flex: 1;
+      max-width: 160px;
+      height: 8px;
+      border-radius: 4px;
+      background: linear-gradient(90deg, #2a2a2a, #7B3500, #FF6B00);
+    }
+
+    /* ── Global Activity ── */
+    #card-global { grid-area: global; }
+
+    .global-chart {
+      display: flex;
+      align-items: flex-end;
+      gap: 3px;
+      height: 80px;
+      margin-bottom: 0.5rem;
+      position: relative;
+    }
+
+    .global-bar-wrap {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      height: 100%;
+      position: relative;
+    }
+
+    .global-bar {
+      width: 100%;
+      border-radius: 3px 3px 0 0;
+      transition: opacity 0.2s;
+      position: absolute;
+      bottom: 0;
+    }
+
+    .global-bar.low    { background: #3a3a3a; }
+    .global-bar.medium { background: var(--accent-dim); }
+    .global-bar.high   { background: var(--accent); }
+    .global-bar.best   { background: var(--green); }
+
+    .global-bar-wrap.now-hour .global-bar {
+      outline: 2px solid white;
+      outline-offset: 1px;
+    }
+
+    .now-label {
+      position: absolute;
+      top: -20px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.55rem;
+      font-weight: 700;
+      color: white;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 1px 3px;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+
+    .global-labels {
+      display: flex;
+      gap: 3px;
+      font-size: 0.6rem;
+      color: var(--text-secondary);
+      text-align: center;
+    }
+
+    .global-label-item {
+      flex: 1;
+      text-align: center;
+    }
+
+    .global-label-item.now-label-text {
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    .global-legend {
+      display: flex;
+      gap: 1.25rem;
+      margin-top: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+    }
+
+    .legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+
+    /* ── Sessions ── */
+    #card-sessions { grid-area: sessions; }
+
+    .sessions-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      max-height: 280px;
+      overflow-y: auto;
+      padding-right: 0.25rem;
+    }
+
+    .sessions-list::-webkit-scrollbar { width: 4px; }
+    .sessions-list::-webkit-scrollbar-track { background: var(--bg-elevated); border-radius: 2px; }
+    .sessions-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .session-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg-elevated);
+      border-radius: 8px;
+      padding: 0.6rem 0.9rem;
+      gap: 0.75rem;
+    }
+
+    .session-time {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      white-space: nowrap;
+    }
+
+    .session-bar-wrap {
+      flex: 1;
+      height: 4px;
+      background: var(--bg-surface);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .session-bar {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 2px;
+    }
+
+    .session-total {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      white-space: nowrap;
+    }
+
+    /* ── Tips ── */
+    #card-tips { grid-area: tips; }
+
+    .tips-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+
+    .tip-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.6rem;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    .tip-icon {
+      color: var(--accent);
+      font-size: 0.9rem;
+      margin-top: 0.05rem;
+      flex-shrink: 0;
+    }
+
+    /* ── Tooltip ── */
+    [data-tip] {
+      position: relative;
+    }
+
+    [data-tip]:hover::after {
+      content: attr(data-tip);
+      position: absolute;
+      bottom: calc(100% + 6px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: #111;
+      color: var(--text-primary);
+      font-size: 0.7rem;
+      white-space: nowrap;
+      padding: 4px 8px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    /* ── Data freshness ── */
+    .data-meta {
+      text-align: right;
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      padding: 0 0 0.5rem 0;
+      opacity: 0.7;
+    }
+
+    .data-meta span { color: var(--text-primary); }
+
+    /* ── No data ── */
+    .empty-notice {
+      text-align: center;
+      padding: 2rem 1rem;
+      color: var(--text-secondary);
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-title">
+    <span class="dot"></span>
+    Claude Code Token Tracker
+  </div>
+  <div class="utc-clock">UTC <span id="clock">--:--:--</span></div>
+</header>
+
+<main>
+  <!-- Countdown -->
+  <div class="card" id="card-countdown">
+    <div class="card-title">Next Reset</div>
+    <div class="countdown-big" id="countdown-timer">--:--:--</div>
+    <div class="countdown-label">Resets daily at 19:00 UTC</div>
+    <div class="progress-track">
+      <div class="progress-fill" id="countdown-progress" style="width:0%"></div>
+    </div>
+    <div class="progress-meta">
+      <span id="progress-start-label">19:00 UTC</span>
+      <span id="progress-pct">0%</span>
+      <span id="progress-end-label">19:00 UTC +1d</span>
+    </div>
+  </div>
+
+  <!-- Status -->
+  <div class="card" id="card-status">
+    <div class="card-title">Current Status</div>
+    <div class="status-badge" id="status-badge">...</div>
+    <div class="status-desc" id="status-desc"></div>
+  </div>
+
+  <!-- Today's Usage -->
+  <div class="card" id="card-today">
+    <div class="card-title">Today's Token Usage</div>
+    <div class="today-grid" id="today-grid"></div>
+  </div>
+
+  <!-- Heatmap -->
+  <div class="card" id="card-heatmap">
+    <div class="card-title">Your 24-Hour Usage Pattern (UTC)</div>
+    <div class="heatmap-grid" id="heatmap-grid"></div>
+    <div class="heatmap-labels" id="heatmap-labels"></div>
+    <div class="heatmap-legend">
+      <span>Low</span>
+      <div class="legend-gradient"></div>
+      <span>High usage</span>
+      <span style="margin-left:auto;color:var(--text-secondary);font-size:0.7rem;">Based on your session history &nbsp;·&nbsp; pulsing = current hour</span>
+    </div>
+  </div>
+
+  <!-- Global Activity -->
+  <div class="card" id="card-global">
+    <div class="card-title">Estimated Global Claude API Load</div>
+    <div class="global-chart" id="global-chart"></div>
+    <div class="global-labels" id="global-labels"></div>
+    <div class="global-legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#3a3a3a"></div> Low</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--accent-dim)"></div> Moderate</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div> Peak</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div> Best time (fresh tokens)</div>
+    </div>
+  </div>
+
+  <!-- Sessions -->
+  <div class="card" id="card-sessions">
+    <div class="card-title">Recent Sessions</div>
+    <div class="sessions-list" id="sessions-list"></div>
+  </div>
+
+  <!-- Tips -->
+  <div class="card" id="card-tips">
+    <div class="card-title">Tips</div>
+    <div class="tips-list">
+      <div class="tip-item"><span class="tip-icon">▶</span><span>Use after <strong>19:00 UTC</strong> to start with a fresh daily token budget.</span></div>
+      <div class="tip-item"><span class="tip-icon">▶</span><span><strong>Off-peak hours (20:00–08:00 UTC)</strong> mean less server load and generally faster responses.</span></div>
+      <div class="tip-item"><span class="tip-icon">▶</span><span>Cache-heavy sessions cost fewer tokens — reuse long context windows where possible.</span></div>
+      <div class="tip-item"><span class="tip-icon">▶</span><span>Break very large tasks across the reset boundary to avoid hitting limits mid-session.</span></div>
+    </div>
+  </div>
+</main>
+
+<script>
+// ── Demo data (used when fetch fails) ──────────────────────────────────────
+const DEMO_DATA = {
+  generated_at: new Date().toISOString().replace(/\.\d+Z$/, 'Z'),
+  reset_hour_utc: 19,
+  hourly_patterns: [
+    8200, 4100, 2800, 1200, 900, 600,       // 00-05
+    1500, 3200, 9800, 18400, 22000, 19500,  // 06-11
+    17000, 15000, 12000, 9500, 7200, 5800,  // 12-17
+    4200, 21000, 26000, 18000, 14000, 11000 // 18-23
+  ],
+  today_tokens: { input: 38400, output: 12800, cache_read: 142000, cache_create: 22000 },
+  daily_history: (() => {
+    const arr = [];
+    const now = new Date();
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date(now);
+      d.setUTCDate(d.getUTCDate() - i);
+      arr.push({
+        date: d.toISOString().slice(0, 10),
+        total: Math.floor(Math.random() * 180000 + 20000)
+      });
+    }
+    return arr;
+  })(),
+  sessions: (() => {
+    const arr = [];
+    const now = new Date();
+    let cursor = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+    for (let i = 0; i < 8; i++) {
+      const dur = Math.floor(Math.random() * 45 + 5) * 60 * 1000;
+      const s = new Date(cursor);
+      const e = new Date(cursor.getTime() + dur);
+      arr.push({
+        start: s.toISOString().replace(/\.\d+Z$/, 'Z'),
+        end:   e.toISOString().replace(/\.\d+Z$/, 'Z'),
+        total_tokens: Math.floor(Math.random() * 80000 + 5000)
+      });
+      cursor = new Date(e.getTime() + Math.floor(Math.random() * 30 + 10) * 60 * 1000);
+    }
+    return arr.reverse();
+  })()
+};
+
+// ── Global activity levels (0-10) for each UTC hour ───────────────────────
+const GLOBAL_LEVELS = [
+  3, 2, 2, 2, 1, 1,    // 00-05  low
+  2, 3, 5, 6, 7, 7,    // 06-11  rising
+  7, 8, 9, 10, 10, 9,  // 12-17  peak (US + EU overlap)
+  5, 4, 4, 5, 5, 4     // 18-23  falling after reset
+];
+
+// ── Utilities ─────────────────────────────────────────────────────────────
+function fmtN(n) {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+  if (n >= 1_000)     return (n / 1_000).toFixed(1) + 'K';
+  return String(n);
+}
+
+function pad2(n) { return String(n).padStart(2, '0'); }
+
+function heatColor(val, max) {
+  if (max === 0 || val === 0) return '#2a2a2a';
+  const t = Math.min(val / max, 1);
+  // Interpolate: #2a2a2a → #7B3500 → #FF6B00
+  if (t < 0.5) {
+    const s = t * 2;
+    const r = Math.round(0x2a + s * (0x7B - 0x2a));
+    const g = Math.round(0x2a + s * (0x35 - 0x2a));
+    const b = Math.round(0x2a + s * (0x00 - 0x2a));
+    return `rgb(${r},${g},${b})`;
+  } else {
+    const s = (t - 0.5) * 2;
+    const r = Math.round(0x7B + s * (0xFF - 0x7B));
+    const g = Math.round(0x35 + s * (0x6B - 0x35));
+    const b = 0;
+    return `rgb(${r},${g},${b})`;
+  }
+}
+
+function utcNow() { return new Date(); }
+
+// ── Clock & Countdown ─────────────────────────────────────────────────────
+function updateClock() {
+  const now = utcNow();
+  const h = pad2(now.getUTCHours());
+  const m = pad2(now.getUTCMinutes());
+  const s = pad2(now.getUTCSeconds());
+  document.getElementById('clock').textContent = `${h}:${m}:${s}`;
+  updateCountdown(now);
+  updateStatus(now);
+}
+
+function updateCountdown(now) {
+  const RESET_H = 19;
+  // Next reset time
+  let next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), RESET_H, 0, 0));
+  if (now.getUTCHours() >= RESET_H) {
+    next.setUTCDate(next.getUTCDate() + 1);
+  }
+  const totalMs = 24 * 3600 * 1000;
+  const diffMs  = next.getTime() - now.getTime();
+  const elapsed = totalMs - diffMs;
+  const pct = Math.max(0, Math.min(100, (elapsed / totalMs) * 100));
+
+  const hh = Math.floor(diffMs / 3600000);
+  const mm = Math.floor((diffMs % 3600000) / 60000);
+  const ss = Math.floor((diffMs % 60000) / 1000);
+
+  document.getElementById('countdown-timer').textContent =
+    `${pad2(hh)} h ${pad2(mm)} m ${pad2(ss)} s`;
+  document.getElementById('countdown-progress').style.width = pct.toFixed(2) + '%';
+  document.getElementById('progress-pct').textContent = pct.toFixed(0) + '%';
+}
+
+function updateStatus(now) {
+  const h = now.getUTCHours();
+  const badge = document.getElementById('status-badge');
+  const desc  = document.getElementById('status-desc');
+
+  // 19:00–08:00 = great (off-peak + fresh tokens)
+  // 08:00–14:00 = moderate
+  // 14:00–19:00 = peak
+  let mode, label, explanation;
+  if (h >= 19 || h < 8) {
+    mode = 'great';
+    label = '🟢 GREAT TIME';
+    explanation = 'Fresh daily tokens just reset (or reset very recently). Server load is low and response times are typically faster. Ideal window for heavy usage.';
+  } else if (h < 14) {
+    mode = 'moderate';
+    label = '🟡 MODERATE';
+    explanation = 'European developers are active and US engineers are coming online. Load is climbing but still manageable. Fine for moderate work.';
+  } else {
+    mode = 'peak';
+    label = '🔴 PEAK HOURS';
+    explanation = 'US and EU developer overlap — this is the busiest period for the Claude API. Consider delaying heavy usage until after 19:00 UTC when tokens also reset.';
+  }
+
+  badge.className = 'status-badge ' + mode;
+  badge.textContent = label;
+  desc.textContent = explanation;
+}
+
+// ── Heatmap ───────────────────────────────────────────────────────────────
+function renderHeatmap(patterns) {
+  const now = utcNow();
+  const currentH = now.getUTCHours();
+  const max = Math.max(...patterns, 1);
+  const grid = document.getElementById('heatmap-grid');
+  const labels = document.getElementById('heatmap-labels');
+  grid.innerHTML = '';
+  labels.innerHTML = '';
+
+  for (let h = 0; h < 24; h++) {
+    const val = patterns[h];
+    const cell = document.createElement('div');
+    cell.className = 'heatmap-cell' + (h === currentH ? ' current-hour' : '');
+    cell.style.background = heatColor(val, max);
+    cell.setAttribute('data-tip', `${pad2(h)}:00 UTC — ${fmtN(val)} tokens`);
+    grid.appendChild(cell);
+
+    const lbl = document.createElement('div');
+    lbl.className = 'heatmap-label-item' + (h === currentH ? ' current-hour-label' : '');
+    lbl.textContent = pad2(h);
+    labels.appendChild(lbl);
+  }
+}
+
+// ── Global chart ──────────────────────────────────────────────────────────
+function renderGlobalChart() {
+  const now = utcNow();
+  const currentH = now.getUTCHours();
+  const chart  = document.getElementById('global-chart');
+  const labelsEl = document.getElementById('global-labels');
+  chart.innerHTML = '';
+  labelsEl.innerHTML = '';
+
+  const maxLevel = 10;
+
+  for (let h = 0; h < 24; h++) {
+    const level = GLOBAL_LEVELS[h];
+    const pct   = (level / maxLevel) * 100;
+
+    // classify
+    let cls = 'low';
+    // hours 19-07 after reset = best time (green)
+    const isBest = (h >= 19 || h < 8);
+    if (isBest && level <= 5) cls = 'best';
+    else if (level >= 8) cls = 'high';
+    else if (level >= 4) cls = 'medium';
+
+    const wrap = document.createElement('div');
+    wrap.className = 'global-bar-wrap' + (h === currentH ? ' now-hour' : '');
+
+    const bar = document.createElement('div');
+    bar.className = `global-bar ${cls}`;
+    bar.style.height = pct + '%';
+    bar.setAttribute('data-tip', `${pad2(h)}:00 UTC — load ${level}/10`);
+
+    if (h === currentH) {
+      const nowLbl = document.createElement('div');
+      nowLbl.className = 'now-label';
+      nowLbl.textContent = 'NOW';
+      wrap.appendChild(nowLbl);
+    }
+
+    wrap.appendChild(bar);
+    chart.appendChild(wrap);
+
+    const lbl = document.createElement('div');
+    lbl.className = 'global-label-item' + (h === currentH ? ' now-label-text' : '');
+    lbl.textContent = pad2(h);
+    labelsEl.appendChild(lbl);
+  }
+}
+
+// ── Today's Usage ─────────────────────────────────────────────────────────
+function renderToday(today) {
+  const grid = document.getElementById('today-grid');
+  const fields = [
+    { key: 'input',        label: 'Input' },
+    { key: 'output',       label: 'Output' },
+    { key: 'cache_read',   label: 'Cache Read' },
+    { key: 'cache_create', label: 'Cache Create' },
+  ];
+
+  const vals = fields.map(f => today[f.key] || 0);
+  const maxVal = Math.max(...vals, 1);
+  grid.innerHTML = '';
+
+  fields.forEach((f, i) => {
+    const v = vals[i];
+    const pct = (v / maxVal) * 100;
+    const el = document.createElement('div');
+    el.className = 'today-stat';
+    el.innerHTML = `
+      <div class="today-stat-label">${f.label}</div>
+      <div class="today-stat-value">${fmtN(v)}</div>
+      <div class="today-stat-bar-track">
+        <div class="today-stat-bar-fill" style="width:${pct.toFixed(1)}%"></div>
+      </div>`;
+    grid.appendChild(el);
+  });
+}
+
+// ── Sessions ──────────────────────────────────────────────────────────────
+function renderSessions(sessions) {
+  const list = document.getElementById('sessions-list');
+  if (!sessions || sessions.length === 0) {
+    list.innerHTML = '<div class="empty-notice">No session data found.</div>';
+    return;
+  }
+
+  const maxTok = Math.max(...sessions.map(s => s.total_tokens), 1);
+  list.innerHTML = '';
+
+  sessions.slice(0, 20).forEach(s => {
+    const start = new Date(s.start);
+    const end   = new Date(s.end);
+    const startStr = `${pad2(start.getUTCMonth()+1)}/${pad2(start.getUTCDate())} ${pad2(start.getUTCHours())}:${pad2(start.getUTCMinutes())} UTC`;
+    const durMs  = end.getTime() - start.getTime();
+    const durMin = Math.round(durMs / 60000);
+    const durStr = durMin < 60 ? `${durMin}m` : `${Math.floor(durMin/60)}h ${durMin%60}m`;
+    const pct    = (s.total_tokens / maxTok) * 100;
+
+    const row = document.createElement('div');
+    row.className = 'session-row';
+    row.innerHTML = `
+      <div class="session-time">${startStr} · ${durStr}</div>
+      <div class="session-bar-wrap"><div class="session-bar" style="width:${pct.toFixed(1)}%"></div></div>
+      <div class="session-total">${fmtN(s.total_tokens)}</div>`;
+    list.appendChild(row);
+  });
+}
+
+// ── Data freshness ────────────────────────────────────────────────────────
+function setDataMeta(generatedAt, isDemo) {
+  // insert/update meta note at top of main
+  let meta = document.getElementById('data-meta');
+  if (!meta) {
+    meta = document.createElement('div');
+    meta.id = 'data-meta';
+    meta.className = 'data-meta';
+    meta.style.gridColumn = '1 / -1';
+    document.querySelector('main').prepend(meta);
+  }
+  if (isDemo) {
+    meta.innerHTML = '⚠ Could not load <code>token-tracker-data.json</code> — showing <strong>demo data</strong>. Run <code>python serve-token-tracker.py</code> to see real data.';
+    meta.style.color = '#eab308';
+  } else {
+    const d = new Date(generatedAt);
+    const ts = `${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())} UTC`;
+    meta.innerHTML = `Data generated at <span>${ts}</span> — refresh the page or restart the server to update.`;
+  }
+}
+
+// ── Bootstrap ─────────────────────────────────────────────────────────────
+async function loadData() {
+  let data = null;
+  let isDemo = false;
+
+  try {
+    const resp = await fetch('token-tracker-data.json?t=' + Date.now());
+    if (resp.ok) {
+      data = await resp.json();
+    } else {
+      throw new Error('HTTP ' + resp.status);
+    }
+  } catch (e) {
+    console.warn('Could not load token-tracker-data.json, using demo data.', e);
+    data = DEMO_DATA;
+    isDemo = true;
+  }
+
+  setDataMeta(data.generated_at, isDemo);
+  renderHeatmap(data.hourly_patterns || new Array(24).fill(0));
+  renderToday(data.today_tokens || {});
+  renderSessions(data.sessions || []);
+}
+
+function init() {
+  // Static renders
+  renderGlobalChart();
+
+  // Load JSON data
+  loadData();
+
+  // Start live clock (runs every second)
+  updateClock();
+  setInterval(updateClock, 1000);
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
