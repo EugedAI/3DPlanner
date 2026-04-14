@@ -1,3 +1,12 @@
 node_modules/
 .DS_Store
 .vercel
+.env
+.env.local
+.env.*.local
+
+# Raw model files — optimise before committing to /public/models/
+/models/raw/
+
+# Build output
+dist/
