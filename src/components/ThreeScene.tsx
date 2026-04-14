@@ -3,62 +3,116 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
-import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js'
+import { CSS2DRenderer } from 'three/examples/jsm/renderers/CSS2DRenderer.js'
 import { useSceneStore } from '../store/useSceneStore'
-import type { Product } from '../types'
+import type { ProductVariant } from '../types'
+import { getEquidistantSpacing } from '../lib/roomUtils'
 
-// ── helpers ─────────────────────────────────────────────────────────────────
-
+// mm → metres
 function mmToM(mm: number) {
   return mm / 1000
 }
 
-// Build a procedural bay mesh from a Product's first variant
-function buildProceduralBay(product: Product): THREE.Group {
-  const variant = product.variants[0]
-  const w = mmToM(variant.width)
-  const h = variant.height > 0 ? mmToM(variant.height) : 0.05
-  const d = mmToM(variant.depth)
-
-  const group = new THREE.Group()
-
-  // Frame colour by objectType
-  const frameColours: Record<string, number> = {
+// Frame colour from frameCoating / objectType
+function frameColour(
+  objectType: string,
+  frameCoating: string
+): number {
+  if (frameCoating.toLowerCase().includes('timber') ||
+      frameCoating.toLowerCase().includes('wood')) {
+    return 0xc4a265
+  }
+  if (frameCoating.toLowerCase().includes('powder')) {
+    return 0xc0c0c0
+  }
+  const fallback: Record<string, number> = {
     starter: 0x4a90b8,
     extender: 0x6aab6a,
     shelf: 0xb8a04a,
     accessory: 0x9a6ab8,
   }
-  const colour = frameColours[product.objectType] ?? 0x888888
+  return fallback[objectType] ?? 0x888888
+}
 
-  const frameGeo = new THREE.BoxGeometry(w, h, d)
-  const frameMat = new THREE.MeshStandardMaterial({
-    color: colour,
-    transparent: true,
-    opacity: 0.75,
-    wireframe: false,
-  })
-  const box = new THREE.Mesh(frameGeo, frameMat)
-  box.position.y = h / 2
-  box.castShadow = true
-  box.receiveShadow = true
-  group.add(box)
+interface BayMeshUserData {
+  instanceId: string
+  objectType: string
+  width: number
+  height: number
+  depth: number
+  numberOfShelves: number
+  numberOfLevels: number
+  compatibleShelfSku: string | null
+}
 
-  // Shelf lines
-  if (variant.numberOfShelves > 0 && h > 0) {
-    const shelfMat = new THREE.LineBasicMaterial({ color: 0xffffff, opacity: 0.4, transparent: true })
-    const spacing = h / (variant.numberOfShelves + 1)
-    for (let i = 1; i <= variant.numberOfShelves; i++) {
-      const y = i * spacing
-      const pts = [
-        new THREE.Vector3(-w / 2, y, -d / 2),
-        new THREE.Vector3(w / 2, y, -d / 2),
-        new THREE.Vector3(w / 2, y, d / 2),
-        new THREE.Vector3(-w / 2, y, d / 2),
-        new THREE.Vector3(-w / 2, y, -d / 2),
-      ]
-      const geo = new THREE.BufferGeometry().setFromPoints(pts)
-      group.add(new THREE.Line(geo, shelfMat))
+/**
+ * Build a procedural bay mesh.
+ * isExtender: when true, left upright is omitted (shares right upright of neighbour).
+ */
+function buildBayMesh(
+  variant: ProductVariant,
+  objectType: string,
+  instanceId: string,
+  currentShelves?: number
+): THREE.Group {
+  const w = mmToM(variant.width)
+  const h = variant.height > 0 ? mmToM(variant.height) : 0.05
+  const d = mmToM(variant.depth)
+  const isExtender = objectType === 'extender'
+  const col = frameColour(objectType, variant.frameCoating)
+
+  const group = new THREE.Group()
+  group.name = instanceId
+
+  const userData: BayMeshUserData = {
+    instanceId,
+    objectType,
+    width: variant.width,
+    height: variant.height,
+    depth: variant.depth,
+    numberOfShelves: variant.numberOfShelves,
+    numberOfLevels: variant.numberOfLevels,
+    compatibleShelfSku: variant.compatibleShelfSku,
+  }
+  group.userData = userData
+
+  const frameMat = new THREE.MeshStandardMaterial({ color: col, roughness: 0.55, metalness: 0.3 })
+
+  // Uprights (40mm wide = 0.04m)
+  const uprightW = 0.04
+  const uprightGeo = new THREE.BoxGeometry(uprightW, h, d)
+
+  // Right upright — always present
+  const rightUpright = new THREE.Mesh(uprightGeo, frameMat)
+  rightUpright.position.set(w / 2 - uprightW / 2, h / 2, 0)
+  rightUpright.castShadow = true
+  group.add(rightUpright)
+
+  // Left upright — omitted for extenders
+  if (!isExtender) {
+    const leftUpright = new THREE.Mesh(uprightGeo, frameMat)
+    leftUpright.position.set(-w / 2 + uprightW / 2, h / 2, 0)
+    leftUpright.castShadow = true
+    group.add(leftUpright)
+  }
+
+  // Shelves (20mm thick = 0.02m)
+  const shelfCount = currentShelves ?? variant.numberOfShelves
+  if (shelfCount > 0 && h > 0) {
+    const shelfMat = new THREE.MeshStandardMaterial({
+      color: col,
+      roughness: 0.7,
+      metalness: 0.1,
+      transparent: true,
+      opacity: 0.85,
+    })
+    const spacing = getEquidistantSpacing(variant.height > 0 ? variant.height : 50, shelfCount)
+    const shelfGeo = new THREE.BoxGeometry(w, 0.02, d)
+    for (let i = 1; i <= shelfCount; i++) {
+      const shelf = new THREE.Mesh(shelfGeo, shelfMat)
+      shelf.position.y = i * spacing
+      shelf.castShadow = true
+      group.add(shelf)
     }
   }
 
@@ -76,8 +130,8 @@ export default function ThreeScene() {
   const orthoCamRef = useRef<THREE.OrthographicCamera | null>(null)
   const controlsRef = useRef<OrbitControls | null>(null)
   const rafRef = useRef<number>(0)
+  const itemsGroupRef = useRef<THREE.Group | null>(null)
   const placedMeshesRef = useRef<Map<string, THREE.Group>>(new Map())
-  const labelObjectsRef = useRef<Map<string, CSS2DObject>>(new Map())
   const nextIdRef = useRef(0)
 
   // Zustand selectors
@@ -88,7 +142,9 @@ export default function ThreeScene() {
   const setSelectedId = useSceneStore((s) => s.setSelectedId)
   const pendingPlacement = useSceneStore((s) => s.pendingPlacement)
   const setPendingPlacement = useSceneStore((s) => s.setPendingPlacement)
-  const addCartItem = useSceneStore((s) => s.addCartItem)
+  const cartItems = useSceneStore((s) => s.cartItems)
+  const validationError = useSceneStore((s) => s.validationError)
+  const placeItem = useSceneStore((s) => s.placeItem)
 
   // ── camera helpers ──────────────────────────────────────────────────────
 
@@ -122,6 +178,12 @@ export default function ThreeScene() {
     const scene = new THREE.Scene()
     scene.background = new THREE.Color('#1a1a1a')
     sceneRef.current = scene
+
+    // Items group
+    const itemsGroup = new THREE.Group()
+    itemsGroup.name = '__items__'
+    scene.add(itemsGroup)
+    itemsGroupRef.current = itemsGroup
 
     // Renderers
     const renderer = new THREE.WebGLRenderer({ antialias: true })
@@ -166,14 +228,17 @@ export default function ThreeScene() {
     controlsRef.current = controls
     applyControlsForView('3d')
 
+    // Unused loaders (Phase 2: GLB loading)
+    const _draco = new DRACOLoader()
+    const _gltf = new GLTFLoader()
+    _gltf.setDRACOLoader(_draco)
+
     // Lighting
     const ambient = new THREE.AmbientLight(0xffffff, 0.6)
     scene.add(ambient)
-
     const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 0.4)
     hemi.position.set(0, 20, 0)
     scene.add(hemi)
-
     const dir = new THREE.DirectionalLight(0xffffff, 0.8)
     dir.position.set(10, 20, 10)
     dir.castShadow = true
@@ -187,16 +252,7 @@ export default function ThreeScene() {
     scene.add(dir)
 
     // Room
-    setupRoom(scene, roomWidth, roomDepth)
-
-    // Test starter bay (1200×2000×800, 3 shelves) ─ as per spec
-    const testGeo = new THREE.BoxGeometry(1.2, 2.0, 0.8)
-    const testMat = new THREE.MeshStandardMaterial({ color: 0x4a90b8, transparent: true, opacity: 0.75 })
-    const testBox = new THREE.Mesh(testGeo, testMat)
-    testBox.position.set(0, 1.0, 0)
-    testBox.castShadow = true
-    testBox.name = '__test-bay__'
-    scene.add(testBox)
+    setupRoom(scene, useSceneStore.getState().roomWidth, useSceneStore.getState().roomDepth)
 
     // Animate
     const animate = () => {
@@ -236,7 +292,7 @@ export default function ThreeScene() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // ── react to cameraMode changes ─────────────────────────────────────────
+  // ── camera mode ─────────────────────────────────────────────────────────
 
   useEffect(() => {
     applyControlsForView(cameraMode)
@@ -254,35 +310,148 @@ export default function ThreeScene() {
   // ── pending placement → place product in scene ──────────────────────────
 
   useEffect(() => {
-    if (!pendingPlacement || !sceneRef.current) return
+    if (!pendingPlacement || !sceneRef.current || !itemsGroupRef.current) return
 
-    const scene = sceneRef.current
+    const variant = pendingPlacement.variants[0]
+    if (!variant) return
+
     const instanceId = `inst-${nextIdRef.current++}`
-    const group = buildProceduralBay(pendingPlacement)
-    group.name = instanceId
-    group.userData = { instanceId, product: pendingPlacement }
 
-    // Offset each new item slightly so they don't pile up
-    const offset = nextIdRef.current * 1.5
-    group.position.set(offset % roomWidth - roomWidth / 2, 0, 0)
+    // Calculate position: centre or adjacent to rightmost item in last active row
+    const { cartItems: currentItems } = useSceneStore.getState()
+    const bays = currentItems.filter(
+      (i) => i.objectType === 'starter' || i.objectType === 'extender'
+    )
 
-    scene.add(group)
+    let x = 0
+    let z = 0
+
+    if (bays.length > 0) {
+      // Find the row with the highest row index (last placed row)
+      const rows: Array<{ z: number; items: typeof bays }> = []
+      for (const bay of bays) {
+        const bz = bay.z ?? 0
+        const row = rows.find((r) => Math.abs(r.z - bz) <= 0.05)
+        if (row) {
+          row.items.push(bay)
+        } else {
+          rows.push({ z: bz, items: [bay] })
+        }
+      }
+      // Use the last row
+      const lastRow = rows[rows.length - 1]
+      const rightmost = lastRow.items.reduce((a, b) =>
+        (a.x ?? 0) > (b.x ?? 0) ? a : b
+      )
+      const rightmostX = rightmost.x ?? 0
+      const rightmostW = (rightmost.variantWidth ?? 1200) / 1000
+      const thisW = variant.width / 1000
+      x = rightmostX + rightmostW / 2 + thisW / 2
+      z = lastRow.z
+    }
+
+    // Attempt placement via Zustand action (runs bounds + collision checks)
+    const placed = placeItem(pendingPlacement, variant, x, z, instanceId)
+    if (!placed) {
+      // Fallback: try centre of room
+      const fallbackPlaced = placeItem(pendingPlacement, variant, 0, 0, instanceId)
+      if (!fallbackPlaced) {
+        // Cannot place — silently abort
+        setPendingPlacement(null)
+        return
+      }
+    }
+
+    // Determine objectType as set by the store
+    const updatedItems = useSceneStore.getState().cartItems
+    const placed_item = updatedItems.find((i) => i.instanceId === instanceId)
+    const objectType = placed_item?.objectType ?? pendingPlacement.objectType
+
+    // Build mesh
+    const group = buildBayMesh(variant, objectType, instanceId)
+    const finalItem = updatedItems.find((i) => i.instanceId === instanceId)
+    group.position.set(finalItem?.x ?? x, 0, finalItem?.z ?? z)
+    itemsGroupRef.current.add(group)
     placedMeshesRef.current.set(instanceId, group)
 
-    // Add to cart
-    const variant = pendingPlacement.variants[0]
-    addCartItem({
-      instanceId,
-      sku: variant.sku,
-      title: pendingPlacement.title,
-      price: variant.price,
-      quantity: 1,
-      objectType: pendingPlacement.objectType,
-    })
-
-    // Clear pending
     setPendingPlacement(null)
-  }, [pendingPlacement, setPendingPlacement, addCartItem, roomWidth, roomDepth])
+  }, [pendingPlacement, setPendingPlacement, placeItem])
+
+  // ── sync scene with cartItems (removal) ────────────────────────────────
+
+  useEffect(() => {
+    if (!itemsGroupRef.current) return
+    const itemsGroup = itemsGroupRef.current
+    const cartIds = new Set(cartItems.map((i) => i.instanceId))
+
+    // Remove meshes for items no longer in cart
+    placedMeshesRef.current.forEach((group, id) => {
+      if (!cartIds.has(id)) {
+        itemsGroup.remove(group)
+        group.traverse((obj) => {
+          if (obj instanceof THREE.Mesh) {
+            obj.geometry.dispose()
+            if (Array.isArray(obj.material)) {
+              obj.material.forEach((m) => m.dispose())
+            } else {
+              obj.material.dispose()
+            }
+          }
+        })
+        placedMeshesRef.current.delete(id)
+      }
+    })
+  }, [cartItems])
+
+  // ── update shelf count in scene ─────────────────────────────────────────
+
+  useEffect(() => {
+    if (!itemsGroupRef.current) return
+    const itemsGroup = itemsGroupRef.current
+
+    cartItems.forEach((item) => {
+      if (item.objectType !== 'starter' && item.objectType !== 'extender') return
+      const liveCount = (item as typeof item & { currentShelves?: number }).currentShelves
+      if (liveCount === undefined) return
+
+      const existing = placedMeshesRef.current.get(item.instanceId)
+      if (!existing) return
+
+      // Rebuild mesh with new shelf count
+      const variant: ProductVariant = {
+        id: '',
+        sku: item.sku,
+        price: item.price,
+        availableForSale: true,
+        width: item.variantWidth ?? 1200,
+        height: item.variantHeight ?? 2000,
+        depth: item.variantDepth ?? 800,
+        numberOfShelves: item.numberOfShelves ?? 3,
+        numberOfLevels: item.numberOfLevels ?? 5,
+        kgPerShelf: 500,
+        frameMaterial: 'Steel',
+        frameCoating: 'Powder Coated',
+        shelfType: 'Steel Panels',
+        compatibleShelfSku: item.compatibleShelfSku ?? null,
+      }
+
+      // Dispose old mesh
+      itemsGroup.remove(existing)
+      existing.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.geometry.dispose()
+          if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose())
+          else obj.material.dispose()
+        }
+      })
+
+      // Build new mesh
+      const group = buildBayMesh(variant, item.objectType, item.instanceId, liveCount)
+      group.position.set(item.x ?? 0, 0, item.z ?? 0)
+      itemsGroup.add(group)
+      placedMeshesRef.current.set(item.instanceId, group)
+    })
+  }, [cartItems])
 
   // ── selection highlight ─────────────────────────────────────────────────
 
@@ -303,6 +472,57 @@ export default function ThreeScene() {
     })
   }, [selectedId])
 
+  // ── validation highlight (amber outline on invalid bays) ────────────────
+
+  useEffect(() => {
+    if (!validationError) {
+      // Clear amber on all meshes
+      placedMeshesRef.current.forEach((group) => {
+        group.traverse((obj) => {
+          if (obj instanceof THREE.Mesh) {
+            const mat = obj.material as THREE.MeshStandardMaterial
+            if (mat.emissive?.getHex() === 0xff8c00) {
+              mat.emissive = new THREE.Color(0x000000)
+              mat.emissiveIntensity = 0
+            }
+          }
+        })
+      })
+      return
+    }
+
+    // Find extenders whose row has no starter
+    const bays = cartItems.filter(
+      (i) => i.objectType === 'starter' || i.objectType === 'extender'
+    )
+    const affectedIds = new Set<string>()
+    const rows: Array<{ z: number; items: typeof bays }> = []
+    for (const bay of bays) {
+      const bz = bay.z ?? 0
+      const row = rows.find((r) => Math.abs(r.z - bz) <= 0.05)
+      if (row) row.items.push(bay)
+      else rows.push({ z: bz, items: [bay] })
+    }
+    for (const row of rows) {
+      const hasStarter = row.items.some((i) => i.objectType === 'starter')
+      if (!hasStarter) {
+        row.items.forEach((i) => affectedIds.add(i.instanceId))
+      }
+    }
+
+    placedMeshesRef.current.forEach((group, id) => {
+      group.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          const mat = obj.material as THREE.MeshStandardMaterial
+          if (affectedIds.has(id)) {
+            mat.emissive = new THREE.Color(0xff8c00) // amber
+            mat.emissiveIntensity = 0.5
+          }
+        }
+      })
+    })
+  }, [validationError, cartItems])
+
   // ── click-to-select ─────────────────────────────────────────────────────
 
   const handleClick = useCallback(
@@ -322,9 +542,10 @@ export default function ThreeScene() {
       const hits = raycaster.intersectObjects(targets, true)
       if (hits.length > 0) {
         let obj: THREE.Object3D | null = hits[0].object
-        while (obj && !obj.userData.instanceId) obj = obj.parent
-        if (obj?.userData.instanceId) {
-          setSelectedId(obj.userData.instanceId as string)
+        while (obj && !(obj.userData as BayMeshUserData).instanceId) obj = obj.parent
+        const ud = obj?.userData as BayMeshUserData | undefined
+        if (ud?.instanceId) {
+          setSelectedId(ud.instanceId)
           return
         }
       }
@@ -365,10 +586,9 @@ function setupRoom(scene: THREE.Scene, roomWidth: number, roomDepth: number) {
   grid.name = '__grid__'
   scene.add(grid)
 
-  // Boundary walls (wireframe lines)
+  // Room boundary
   const hw = roomWidth / 2
   const hd = roomDepth / 2
-  const wallH = 0.1
   const pts = [
     new THREE.Vector3(-hw, 0, -hd),
     new THREE.Vector3(hw, 0, -hd),
@@ -379,7 +599,7 @@ function setupRoom(scene: THREE.Scene, roomWidth: number, roomDepth: number) {
   const boundaryGeo = new THREE.BufferGeometry().setFromPoints(pts)
   const boundaryMat = new THREE.LineBasicMaterial({ color: 0xff6b00, opacity: 0.6, transparent: true })
   const boundary = new THREE.Line(boundaryGeo, boundaryMat)
-  boundary.position.y = wallH
+  boundary.position.y = 0.1
   boundary.name = '__boundary__'
   scene.add(boundary)
 }

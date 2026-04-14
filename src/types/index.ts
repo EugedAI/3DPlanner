@@ -31,6 +31,16 @@ export interface CartItem {
   price: number
   quantity: number
   objectType: ObjectType
+  // Position in metres (set when placed in scene)
+  x?: number
+  z?: number
+  // Variant dimensions in mm (needed for collision detection)
+  variantWidth?: number
+  variantDepth?: number
+  variantHeight?: number
+  numberOfShelves?: number
+  numberOfLevels?: number
+  compatibleShelfSku?: string | null
 }
 
 export type CameraMode = '2d' | '3d'

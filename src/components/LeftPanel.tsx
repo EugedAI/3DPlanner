@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useSceneStore } from '../store/useSceneStore'
 import { DEV_CATALOGUE } from '../lib/devCatalogue'
-import type { Product, ObjectType } from '../types'
+import type { Product, ObjectType, CartItem } from '../types'
 
 const OBJECT_TYPE_LABELS: Record<ObjectType, string> = {
   starter: 'Starter',
@@ -103,17 +103,113 @@ function ProductCard({ product }: { product: Product }) {
   )
 }
 
+function ShelfControls({ item }: { item: CartItem }) {
+  const updateShelfCount = useSceneStore((s) => s.updateShelfCount)
+
+  const defaultCount = item.numberOfShelves ?? 3
+  const maxCount = item.numberOfLevels ?? 5
+  const liveCount = (item as CartItem & { currentShelves?: number }).currentShelves ?? defaultCount
+  const extra = liveCount - defaultCount
+
+  const atMin = liveCount <= defaultCount
+  const atMax = liveCount >= maxCount
+
+  function shelfLabel() {
+    if (extra > 0) return `${liveCount} shelves (+${extra})`
+    return `${liveCount} shelves (default)`
+  }
+
+  return (
+    <div
+      style={{
+        margin: '0 8px 8px',
+        padding: '10px 12px',
+        background: 'var(--bg-secondary)',
+        border: '1px solid var(--border)',
+      }}
+    >
+      <div
+        style={{
+          fontSize: 10,
+          fontWeight: 600,
+          textTransform: 'uppercase',
+          letterSpacing: '0.8px',
+          color: 'var(--text-muted)',
+          marginBottom: 8,
+        }}
+      >
+        Selected Bay
+      </div>
+      <div
+        style={{
+          fontSize: 12,
+          color: 'var(--text-primary)',
+          marginBottom: 8,
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+        }}
+        title={item.title}
+      >
+        {item.title}
+      </div>
+      <div
+        style={{
+          fontSize: 12,
+          color: 'var(--text-secondary)',
+          marginBottom: 10,
+        }}
+      >
+        {shelfLabel()}
+      </div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button
+          disabled={atMin}
+          onClick={() => updateShelfCount(item.instanceId, -1)}
+          style={{
+            flex: 1,
+            padding: '5px 0',
+            fontSize: 11,
+            background: atMin ? 'var(--bg-primary)' : 'var(--bg-secondary)',
+            border: '1px solid var(--border)',
+            color: atMin ? 'var(--text-muted)' : 'var(--text-primary)',
+            cursor: atMin ? 'not-allowed' : 'pointer',
+          }}
+        >
+          − Remove shelf
+        </button>
+        <button
+          disabled={atMax}
+          onClick={() => updateShelfCount(item.instanceId, +1)}
+          style={{
+            flex: 1,
+            padding: '5px 0',
+            fontSize: 11,
+            background: atMax ? 'var(--bg-primary)' : 'var(--bg-secondary)',
+            border: '1px solid var(--border)',
+            color: atMax ? 'var(--text-muted)' : 'var(--text-primary)',
+            cursor: atMax ? 'not-allowed' : 'pointer',
+          }}
+        >
+          + Add shelf
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function LeftPanel() {
   const loading = useSceneStore((s) => s.loading)
   const error = useSceneStore((s) => s.error)
   const products = useSceneStore((s) => s.products)
   const setProducts = useSceneStore((s) => s.setProducts)
   const setLoading = useSceneStore((s) => s.setLoading)
+  const selectedId = useSceneStore((s) => s.selectedId)
+  const cartItems = useSceneStore((s) => s.cartItems)
 
   // Load dev catalogue on mount
   useEffect(() => {
     setLoading(true)
-    // Simulate async — real Shopify fetch in Phase 2
     const t = setTimeout(() => {
       setProducts(DEV_CATALOGUE)
       setLoading(false)
@@ -130,6 +226,15 @@ export default function LeftPanel() {
     { starter: [], extender: [], shelf: [], accessory: [] }
   )
 
+  // Find selected bay item for shelf controls
+  const selectedItem = selectedId
+    ? cartItems.find(
+        (i) =>
+          i.instanceId === selectedId &&
+          (i.objectType === 'starter' || i.objectType === 'extender')
+      )
+    : null
+
   return (
     <div id="catalogue-panel" style={{ transform: 'translateX(0)' }}>
       <div className="panel-header">
@@ -142,6 +247,9 @@ export default function LeftPanel() {
           ))}
         </div>
       </div>
+
+      {/* Shelf controls when a bay is selected */}
+      {selectedItem && <ShelfControls item={selectedItem} />}
 
       <div className="product-list">
         {loading && (
